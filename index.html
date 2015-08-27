@@ -1,0 +1,175 @@
+<html>
+  <head></head>
+  <body>
+    <script>
+      var canvas = document.createElement("canvas");
+      document.body.appendChild(canvas);
+      var ctx = canvas.getContext("2d");
+      
+      canvas.height = canvas.width = 600;
+
+      function clear() {
+        ctx.fillStyle="#fff";
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+      }
+      function Vec(x,y) {
+        this.x = x;
+        this.y = y;
+      }
+      Vec.prototype = {
+        get : function() {
+          return new Vec(this.x,this.y);
+        },
+        mag : function() {
+          return Math.sqrt(this.x*this.x + this.y*this.y);
+        },
+        dot : function(p) {
+          return this.x*p.x + this.y*p.y;
+        },
+        mult : function(n) {
+          this.x *= n;
+          this.y *= n;
+        },
+        norm : function() {
+          var mag = this.mag();
+          return new Vec(this.x/mag,this.y/mag);
+        }
+      }
+      Vec.add = function(v0,v1) {
+        return new Vec(v0.x+v1.x,v0.y+v1.y);
+      }
+      Vec.sub = function(v0,v1) {
+        return new Vec(v0.x-v1.x,v0.y-v1.y);
+      }
+      Vec.mult = function(v,n) {
+        return new Vec(v.x*n,v.y*n);
+      }
+
+      function Point(x,y,rgb) {
+        this.pos = new Vec(x,y);
+        this.rgb = rgb;
+        this.vel = new Vec(0,0);
+      }
+      Point.prototype = {
+        tick : function() {
+          var newPos = Vec.add(this.pos,this.vel);
+          if (newPos.x < 0 || newPos.x >= canvas.width) {
+            this.vel = Vec.sub(this.vel,new Vec(this.vel.x*2.01,0));
+            this.pos.x = this.pos.x + (2*this.vel.x);
+          }
+          if (newPos.y < 0 || newPos.y >= canvas.height) {
+            this.vel = Vec.sub(this.vel,new Vec(0,this.vel.y*2.01));
+            this.pos.y = this.pos.y + (2*this.vel.y);
+          }
+          this.pos = newPos;
+        }
+      }
+      function Tri(points) {
+        this.points = points;
+      }
+      Tri.prototype = {
+        impulse : function(vel) {
+          for (var i=0;i<3;i++) {
+            this.points[i].vel = vel;
+          }
+        },
+        tick : function() {
+          for (var i=0;i<3;i++) {
+            this.points[i].tick();
+          }
+        },
+        draw : function(ctx) {
+          var savedOp = ctx.globalCompositeOperation;
+          var savedFill = ctx.fillStyle;
+          ctx.globalCompositeOperation="source-over";
+          ctx.fillStyle = "#000";
+          this.fill(ctx);
+          ctx.globalCompositeOperation="lighter";
+          ctx.fillStyle = this.grad(ctx,0);
+          this.fill(ctx);
+          ctx.fillStyle = this.grad(ctx,1);
+          this.fill(ctx);
+          ctx.fillStyle = this.grad(ctx,2);
+          this.fill(ctx);
+          ctx.globalCompositeOperation = savedOp;
+          ctx.fillStyle = savedFill;
+        },
+        fill : function(ctx) {
+          ctx.beginPath();
+          ctx.moveTo(this.points[0].pos.x,this.points[0].pos.y);
+          ctx.lineTo(this.points[1].pos.x,this.points[1].pos.y);
+          ctx.lineTo(this.points[2].pos.x,this.points[2].pos.y);
+          ctx.closePath();
+          ctx.fill();
+        },
+        grad : function(ctx,ptIdx) {
+
+          var p0 = this.points[(ptIdx+0)%3];
+          var p1 = this.points[(ptIdx+1)%3];
+          var p2 = this.points[(ptIdx+2)%3];
+
+          var v0 = p0.pos;
+          var v1 = p1.pos;
+          var v2 = p2.pos;
+
+          var a = Vec.sub(v1,v0);
+          var maga = a.mag();
+          var b = Vec.sub(v2,v1);
+          var magb = b.mag();
+          var c = Vec.sub(v0,v2);
+          var magc = c.mag();
+
+          var s = 0.5*(maga+magb+magc); // Heron's
+          var area = Math.sqrt(s*(s-maga)*(s-magb)*(s-magc));
+
+          var normb = b.norm();
+          var magh = 2 * area / magb;
+          var normh = a.x*b.y>a.y*b.x ? 
+              new Vec(normb.y,-normb.x) : new Vec(-normb.y,normb.x); // winding
+          var h = new Vec(normh.x*magh,normh.y*magh);
+
+          var end = Vec.mult(Vec.add(v1,v2),0.5);
+          var start = Vec.sub(end,h);
+
+          var grad = ctx.createLinearGradient(start.x,start.y,end.x,end.y);
+          grad.addColorStop(0,"rgba("+p0.rgb[0]+","+p0.rgb[1]+","+p0.rgb[2]+",1)");
+          grad.addColorStop(1,"rgba("+p0.rgb[0]+","+p0.rgb[1]+","+p0.rgb[2]+",0)");
+          return grad;
+        },
+      }
+
+
+      var p0 = new Point(200,300,[0,255,255]);
+      var p1 = new Point(600,200,[163,255,93]);
+      var p2 = new Point(400,400,[163,93,255]);
+      var tri = new Tri([p0,p1,p2]);
+      tri.impulse(new Vec(4-Math.random()*8,2-Math.random()*4));
+
+      var pa0 = new Point(420,100,[255,163,93]);
+      var pa1 = new Point(120,140,[93,163,255]);
+      var pa2 = new Point(300,400,[255,0,255]);
+      var tri2 = new Tri([pa1,pa2,pa0]);
+      tri2.impulse(new Vec(2-Math.random()*8,2-Math.random()*4));
+
+      var pa0 = new Point(100,100,[255,0,0]);
+      var pa1 = new Point(120,390,[0,0,255]);
+      var pa2 = new Point(300,250,[0,255,0]);
+      var tri3 = new Tri([pa1,pa2,pa0]);
+      tri3.impulse(new Vec(4-Math.random()*8,2-Math.random()*4));
+
+      run();
+
+      function run() {
+        clear(ctx);
+        tri.tick();
+        tri2.tick();
+        tri3.tick();
+        tri3.draw(ctx);
+        tri.draw(ctx);
+        tri2.draw(ctx);
+        setTimeout(run,1000/60);
+      }
+      
+    </script>
+  </body>
+</html>
